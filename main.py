@@ -11,9 +11,7 @@ class Pac(object):
         self.target: Optional[Dict] = None
 
     def get_action(self):
-        return (
-            f"MOVE {self.id} {self.target.coordinates[0]} {self.target.coordinates[1]}"
-        )
+        return f"MOVE {self.id} {self.target.get('x')} {self.target.get('y')}"
 
 
 # ==========================Utils==================================
@@ -41,7 +39,7 @@ for i in range(height):
     row = input()  # one line of the grid: space " " is floor, pound "#" is wall
     for x_ind, char in enumerate(row):
         if char != "#":
-            cells[(x_ind, i)] = {"value": 1, "neighbors": [], "coordinates": (x_ind, i)}
+            cells[(x_ind, i)] = {"value": 1, "neighbors": [], "x": x_ind, "y": i}
 
 # Populate neighbors
 # TODO : optimize symmetry
@@ -55,7 +53,7 @@ for x, y in cells.keys():
 
 # game loop
 while True:
-    my_score, opponent_score = [int(i) for i in input().split()]
+    my_score, opponent_score = [int(j) for j in input().split()]
     visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
     my_pacs: List[Pac] = []
     for i in range(visible_pac_count):
@@ -79,6 +77,10 @@ while True:
 
     visible_pellet_count = int(input())  # all pellets in sight
 
+    for i in range(visible_pellet_count):
+        # value: amount of points this pellet is worth
+        int_x, int_y, value = [int(j) for j in input().split()]
+
     action: str = ""
     for pac in my_pacs:
         neighbors: List[Dict] = [
@@ -87,7 +89,7 @@ while True:
             if cells.get(coords)
         ]
 
-        pac.target = max(neighbors, key=lambda x: x.get("value")).get("coordinates")
+        pac.target = max(neighbors, key=lambda x: x.get("value"))
 
         action += f"{pac.get_action()} |"
 
