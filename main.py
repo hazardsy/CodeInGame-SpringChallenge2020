@@ -3,18 +3,12 @@ import sys
 from typing import Dict, List, Optional, Tuple
 
 
-# ==========================Classes===========================
-class Pellet(object):
-    def __init__(self, x: int, y: int, value: int):
-        self.coordinates: Tuple[int, int] = (x, y)
-        self.value = value
-
-
+# ==========================Classes==========================
 class Pac(object):
     def __init__(self, x: int, y: int, id: int):
         self.coordinates: Tuple[int, int] = (x, y)
         self.id = id
-        self.target: Optional[Pellet] = None
+        self.target: Optional[Dict] = None
 
     def get_action(self):
         return (
@@ -22,18 +16,18 @@ class Pac(object):
         )
 
 
-# ============================Utils=============================
-def get_manhattan(pac: Pac, pellet: Pellet) -> int:
-    return sum(
-        [
-            abs(pac.coordinates[i] - pellet.coordinates[i])
-            for i in range(len(pac.coordinates))
-        ]
-    )
+# ==========================Utils==================================
 
 
-def get_closest_pellet(pac: Pac, pellets: List[Pellet]) -> Pellet:
-    return sorted(pellets, key=lambda pel: get_manhattan(pac, pel))[0]
+def get_neighbors(
+    coords: Tuple[int, int], width: int, height: int
+) -> List[Tuple[int, int]]:
+    return [
+        ((coords[0] - 1) % width, coords[1]),
+        ((coords[0] + 1) % width, coords[1]),
+        (coords[0], (coords[1] - 1) % height),
+        (coords[0], (coords[1] + 1) % height),
+    ]
 
 
 # ==========================Game===================================
@@ -47,7 +41,7 @@ for i in range(height):
     row = input()  # one line of the grid: space " " is floor, pound "#" is wall
     for x_ind, char in enumerate(row):
         if char != "#":
-            cells[(x_ind, i)] = {"value": 1, "neighbors": []}
+            cells[(x_ind, i)] = {"value": 1, "neighbors": [], "coordinates": (x_ind, i)}
 
 # Populate neighbors
 # TODO : optimize symmetry
@@ -85,21 +79,15 @@ while True:
 
     visible_pellet_count = int(input())  # all pellets in sight
 
-    pellets: List[Pellet] = []
-    for i in range(visible_pellet_count):
-        # value: amount of points this pellet is worth
-        int_x, int_y, value = [int(j) for j in input().split()]
-        pellets.append(Pellet(int_x, int_y, value))
-
-    sps: List[Pellet] = [p for p in pellets if p.value == 10]
-    non_sps: List[Pellet] = [p for p in pellets if p.value != 10]
-
     action: str = ""
     for pac in my_pacs:
-        if len(sps) > 0:
-            pac.target = get_closest_pellet(pac, sps)
-        else:
-            pac.target = get_closest_pellet(pac, non_sps)
+        neighbors: List[Dict] = [
+            cells.get(coords, {})
+            for coords in get_neighbors(pac.coordinates, width=width, height=height)
+            if cells.get(coords)
+        ]
+
+        pac.target = max(neighbors, key=lambda x: x.get("value")).get("coordinates")
 
         action += f"{pac.get_action()} |"
 
