@@ -1,8 +1,9 @@
-import sys
 import math
-from typing import Tuple, List, Optional
+import sys
+from typing import Dict, List, Optional, Tuple
 
-# Classes
+
+# ==========================Classes===========================
 class Pellet(object):
     def __init__(self, x: int, y: int, value: int):
         self.coordinates: Tuple[int, int] = (x, y)
@@ -21,7 +22,7 @@ class Pac(object):
         )
 
 
-# Utils
+# ============================Utils=============================
 def get_manhattan(pac: Pac, pellet: Pellet) -> int:
     return sum(
         [
@@ -35,13 +36,28 @@ def get_closest_pellet(pac: Pac, pellets: List[Pellet]) -> Pellet:
     return sorted(pellets, key=lambda pel: get_manhattan(pac, pel))[0]
 
 
-# Game
+# ==========================Game===================================
 
 # width: size of the grid
 # height: top left corner is (x=0, y=0)
 width, height = [int(i) for i in input().split()]
+cells: Dict = {}
+
 for i in range(height):
     row = input()  # one line of the grid: space " " is floor, pound "#" is wall
+    for x_ind, char in enumerate(row):
+        if char != "#":
+            cells[(x_ind, i)] = {"value": 1, "neighbors": []}
+
+# Populate neighbors
+# TODO : optimize symmetry
+for x, y in cells.keys():
+    for target_x in [x - 1, x + 1]:
+        if cells.get((target_x, y)):
+            cells[(x, y)].get("neighbors").append((target_x, y))
+    for target_y in [y - 1, y + 1]:
+        if cells.get((x, target_y)):
+            cells[(x, y)].get("neighbors").append((x, target_y))
 
 # game loop
 while True:
