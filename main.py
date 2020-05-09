@@ -52,10 +52,10 @@ for i in range(height):
 # Populate neighbors
 # TODO : optimize symmetry
 for x, y in cells.keys():
-    for target_x in [x - 1, x + 1]:
+    for target_x in [(x - 1) % width, (x + 1) % width]:
         if cells.get((target_x, y)):
             cells[(x, y)].get("neighbors").append((target_x, y))
-    for target_y in [y - 1, y + 1]:
+    for target_y in [(y - 1) % height, (y + 1) % height]:
         if cells.get((x, target_y)):
             cells[(x, y)].get("neighbors").append((x, target_y))
 
