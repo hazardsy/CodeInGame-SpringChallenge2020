@@ -12,8 +12,11 @@ from typing import Any, Dict, List, Optional, Tuple
 # TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
 # TODO : Deal with late game
 # Todo : What to do when pacs see nothing ?
-
+# ==========================Constants==============================
+WINNERS_AGAINST: Dict = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 # ==========================Utils==================================
+def is_my_pac_winning(my_type: Optional[str], foe_type: Optional[str]) -> bool:
+    return WINNERS_AGAINST.get("foe_type") == my_type
 
 
 def get_neighbors(
@@ -37,17 +40,17 @@ def get_action(pac: Dict) -> str:
 
 def diffuse(
     cells: Dict,
-    starting_point: Tuple[int, int],
+    starting_point: Optional[Tuple[int, int]],
     starting_value: float,
     decaying_factor: float,
     eta: float,
 ) -> Dict:
     current_value: float = starting_value
-    visited_cells: List[Tuple[int, int]] = []
+    visited_cells: List[Optional[Tuple[int, int]]] = []
 
-    neighbors: List[Tuple[int, int]] = [starting_point]
+    neighbors: List[Optional[Tuple[int, int]]] = [starting_point]
     while abs(current_value) > eta:
-        next_neighbors: List[Tuple[int, int]] = []
+        next_neighbors: List[Optional[Tuple[int, int]]] = []
         for neighbor in neighbors:
             cells[neighbor]["value"] += current_value
             visited_cells.append(neighbor)
@@ -137,6 +140,17 @@ while True:
 
     action: str = ""
     for pac in [p for p in pacs if p.get("mine")]:
+        current_pac_cells: Dict = copy.deepcopy(current_turn_cells)
+        for foe_pac in [p for p in pacs if not p.get("mine")]:
+            current_pac_cells = diffuse(
+                current_pac_cells,
+                pac.get("coordinates"),
+                10
+                if is_my_pac_winning(pac.get("shape"), foe_pac.get("shape"))
+                else -10,
+                0.9,
+                1,
+            )
 
         neighbors: List[Dict] = [
             current_turn_cells.get(coords, {})
@@ -150,8 +164,7 @@ while True:
 
         action += f"{get_action(pac)} |"
 
-        log_err(pac.get("id"))
+        log_err(pac)
         log_err(neighbors)
-        log_err(pac.get("target"))
 
     print(action)
