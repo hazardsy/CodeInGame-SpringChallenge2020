@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # TODO : Diffuse every cell but change their value depending on last known information
 # TODO : Increase diffuse range for every pac based on time since last pellet eaten
 # TODO : Better spells usage :D
+# IDEA : Never target an already targetted position
 # IDEA : Adjust diffuse parameters based on remaining pellets ?
 # IDEA : Adjust diffuse parameters based on number of neighbors ?
 # IDEA : Adjust agressivity of pacs based on state of the game ?
@@ -132,15 +133,20 @@ while True:
             current_turn_cells, (int_x, int_y), value, 0.9, 0.6 if value == 1 else 1
         )
 
-    # Diffuse pacs values
-    for pac in [p for p in pacs if p.get("mine")]:
-        current_turn_cells = diffuse(
-            current_turn_cells, pac.get("coordinates", (0, 0)), -10, 0.9, 1
-        )
-
     action: str = ""
     for pac in [p for p in pacs if p.get("mine")]:
         current_pac_cells: Dict = copy.deepcopy(current_turn_cells)
+
+        # Diffuse pacs values
+        for friend_pac in [p for p in pacs if p.get("mine")]:
+            current_pac_cells = diffuse(
+                current_pac_cells,
+                friend_pac.get("coordinates", (0, 0)),
+                -10,
+                0.9 if friend_pac.get("id") != pac.get("id") else 0,
+                1,
+            )
+
         for foe_pac in [p for p in pacs if not p.get("mine")]:
             current_pac_cells = diffuse(
                 current_pac_cells,
@@ -152,19 +158,14 @@ while True:
                 1,
             )
 
-        neighbors: List[Dict] = [
-            current_turn_cells.get(coords, {})
-            for coords in get_neighbors(
-                pac.get("coordinates", (0, 0)), width=width, height=height
-            )
-            if current_turn_cells.get(coords)
-        ]
-        random.shuffle(neighbors)
-        pac["target"] = max(neighbors, key=lambda x: x.get("value"))
+        best_cells = sorted(
+            current_pac_cells.values(), key=lambda x: x.get("value"), reverse=True
+        )
+        pac["target"] = best_cells[0]
 
         action += f"{get_action(pac)} |"
 
         log_err(pac)
-        log_err(neighbors)
+        log_err(best_cells)
 
     print(action)
