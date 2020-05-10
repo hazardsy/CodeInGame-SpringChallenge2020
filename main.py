@@ -13,18 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # TODO : Deal with late game
 # Todo : What to do when pacs see nothing ?
 
-# ==========================Classes==========================
-class Pac(object):
-    def __init__(self, x: int, y: int, id: int, mine: bool):
-        self.coordinates: Tuple[int, int] = (x, y)
-        self.id: int = id
-        self.target: Optional[Dict] = None
-        self.mine: bool = mine
-
-    def get_action(self):
-        return f"MOVE {self.id} {self.target.get('x')} {self.target.get('y')}"
-
-
 # ==========================Utils==================================
 
 
@@ -41,6 +29,10 @@ def get_neighbors(
 
 def log_err(mess: Any):
     print(mess, file=sys.stderr)
+
+
+def get_action(pac: Dict) -> str:
+    return f"MOVE {pac.get('id')} {pac.get('target', {}).get('x')} {pac.get('target', {}).get('y')}"
 
 
 def diffuse(
@@ -85,7 +77,6 @@ for i in range(height):
             cells[(x_ind, i)] = {"value": 0, "neighbors": [], "x": x_ind, "y": i}
 
 # Populate neighbors
-# TODO : optimize symmetry
 for coord in cells.keys():
     cells[coord].get("neighbors").extend(
         [
@@ -101,7 +92,7 @@ while True:
 
     my_score, opponent_score = [int(j) for j in input().split()]
     visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
-    pacs: List[Pac] = []
+    pacs: List[Dict] = []
     for i in range(visible_pac_count):
         # pac_id: pac number (unique within a team)
         # mine: true if this pac is yours
@@ -118,7 +109,15 @@ while True:
         int_speed_turns_left = int(speed_turns_left)
         int_ability_cooldown = int(ability_cooldown)
 
-        pacs.append(Pac(int_x, int_y, pac_id, bool_mine))
+        pacs.append(
+            {
+                "coordinates": (int_x, int_y),
+                "id": pac_id,
+                "mine": bool_mine,
+                "shape": type_id,
+                "cooldown": ability_cooldown,
+            }
+        )
 
     visible_pellet_count = int(input())  # all pellets in sight
 
@@ -131,23 +130,28 @@ while True:
         )
 
     # Diffuse pacs values
-    for pac in pacs:
-        current_turn_cells = diffuse(current_turn_cells, pac.coordinates, -10, 0.9, 1)
+    for pac in [p for p in pacs if p.get("mine")]:
+        current_turn_cells = diffuse(
+            current_turn_cells, pac.get("coordinates", (0, 0)), -10, 0.9, 1
+        )
 
     action: str = ""
-    for pac in [p for p in pacs if p.mine]:
+    for pac in [p for p in pacs if p.get("mine")]:
+
         neighbors: List[Dict] = [
             current_turn_cells.get(coords, {})
-            for coords in get_neighbors(pac.coordinates, width=width, height=height)
+            for coords in get_neighbors(
+                pac.get("coordinates", (0, 0)), width=width, height=height
+            )
             if current_turn_cells.get(coords)
         ]
         random.shuffle(neighbors)
-        pac.target = max(neighbors, key=lambda x: x.get("value"))
+        pac["target"] = max(neighbors, key=lambda x: x.get("value"))
 
-        action += f"{pac.get_action()} |"
+        action += f"{get_action(pac)} |"
 
-        log_err(pac.id)
+        log_err(pac.get("id"))
         log_err(neighbors)
-        log_err(pac.target)
+        log_err(pac.get("target"))
 
     print(action)
