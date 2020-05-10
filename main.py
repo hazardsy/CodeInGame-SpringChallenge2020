@@ -1,16 +1,25 @@
 import copy
 import math
+import random
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+# TODO : Friend pacs diffuse negatively, foe pacs diffuse depending on their shape relative to self
+# TODO : Activate spells
+# TODO : Use better choice than random if all possibilities are equal
+# TODO : Ajust diffusing numbers
+# TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
+# TODO : Deal with late game
+# Todo : What to do when pacs see nothing ?
 
 # ==========================Classes==========================
 class Pac(object):
-    def __init__(self, x: int, y: int, id: int):
+    def __init__(self, x: int, y: int, id: int, mine: bool):
         self.coordinates: Tuple[int, int] = (x, y)
-        self.id = id
+        self.id: int = id
         self.target: Optional[Dict] = None
+        self.mine: bool = mine
 
     def get_action(self):
         return f"MOVE {self.id} {self.target.get('x')} {self.target.get('y')}"
@@ -45,7 +54,7 @@ def diffuse(
     visited_cells: List[Tuple[int, int]] = []
 
     neighbors: List[Tuple[int, int]] = [starting_point]
-    while current_value > eta:
+    while abs(current_value) > eta:
         next_neighbors: List[Tuple[int, int]] = []
         for neighbor in neighbors:
             cells[neighbor]["value"] += current_value
@@ -92,7 +101,7 @@ while True:
 
     my_score, opponent_score = [int(j) for j in input().split()]
     visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
-    my_pacs: List[Pac] = []
+    pacs: List[Pac] = []
     for i in range(visible_pac_count):
         # pac_id: pac number (unique within a team)
         # mine: true if this pac is yours
@@ -109,25 +118,30 @@ while True:
         int_speed_turns_left = int(speed_turns_left)
         int_ability_cooldown = int(ability_cooldown)
 
-        if bool_mine:
-            my_pacs.append(Pac(int_x, int_y, pac_id))
+        pacs.append(Pac(int_x, int_y, pac_id, bool_mine))
 
     visible_pellet_count = int(input())  # all pellets in sight
 
+    # Diffuse pellet values
     for i in range(visible_pellet_count):
         # value: amount of points this pellet is worth
         int_x, int_y, value = [int(j) for j in input().split()]
         current_turn_cells = diffuse(
-            current_turn_cells, (int_x, int_y), value, 0.9, 0.5
+            current_turn_cells, (int_x, int_y), value, 0.9, 0.6 if value == 1 else 1
         )
 
+    # Diffuse pacs values
+    for pac in pacs:
+        current_turn_cells = diffuse(current_turn_cells, pac.coordinates, -10, 0.9, 1)
+
     action: str = ""
-    for pac in my_pacs:
+    for pac in [p for p in pacs if p.mine]:
         neighbors: List[Dict] = [
             current_turn_cells.get(coords, {})
             for coords in get_neighbors(pac.coordinates, width=width, height=height)
             if current_turn_cells.get(coords)
         ]
+        random.shuffle(neighbors)
         pac.target = max(neighbors, key=lambda x: x.get("value"))
 
         action += f"{pac.get_action()} |"
