@@ -5,13 +5,17 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# TODO : Friend pacs diffuse negatively, foe pacs diffuse depending on their shape relative to self
-# TODO : Activate spells
 # TODO : Use better choice than random if all possibilities are equal
 # TODO : Ajust diffusing numbers
 # TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
 # TODO : Deal with late game
-# Todo : What to do when pacs see nothing ?
+# TODO : What to do when pacs see nothing ?
+# TODO : Diffuse every cell but change their value depending on last known information
+# TODO : Increase diffuse range for every pac based on time since last pellet eaten
+# TODO : Better spells usage :D
+# IDEA : Adjust diffuse parameters based on remaining pellets ?
+# IDEA : Adjust diffuse parameters based on number of neighbors ?
+# IDEA : Adjust agressivity of pacs based on state of the game ?
 # ==========================Constants==============================
 WINNERS_AGAINST: Dict = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 # ==========================Utils==================================
@@ -35,6 +39,8 @@ def log_err(mess: Any):
 
 
 def get_action(pac: Dict) -> str:
+    if pac.get("cooldown", 1) < 1:
+        return f"SPEED {pac.get('id')}"
     return f"MOVE {pac.get('id')} {pac.get('target', {}).get('x')} {pac.get('target', {}).get('y')}"
 
 
@@ -105,20 +111,14 @@ while True:
         # speed_turns_left: unused in wood leagues
         # ability_cooldown: unused in wood leagues
         (id, mine, x, y, type_id, speed_turns_left, ability_cooldown,) = input().split()
-        pac_id = int(id)
-        bool_mine = mine != "0"
-        int_x = int(x)
-        int_y = int(y)
-        int_speed_turns_left = int(speed_turns_left)
-        int_ability_cooldown = int(ability_cooldown)
 
         pacs.append(
             {
-                "coordinates": (int_x, int_y),
-                "id": pac_id,
-                "mine": bool_mine,
+                "coordinates": (int(x), int(y)),
+                "id": int(id),
+                "mine": mine != "0",
                 "shape": type_id,
-                "cooldown": ability_cooldown,
+                "cooldown": int(ability_cooldown),
             }
         )
 
