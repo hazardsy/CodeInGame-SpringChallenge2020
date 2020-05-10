@@ -5,7 +5,10 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# TODO : Use better choice than random if all possibilities are equal
+# TODO : If sped up, compute the best two cells move (sum of cells ?)
+# TODO : Diffuse from previous as a way to get out of dead ends ?
+# TODO : Diffuse big pellets on n_iter depending on map size
+# TODO : Increase diffuse range if pellets are in vision but every score is 0
 # TODO : Ajust diffusing numbers
 # TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
 # TODO : Deal with late game
@@ -17,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # IDEA : Adjust diffuse parameters based on remaining pellets ?
 # IDEA : Adjust diffuse parameters based on number of neighbors ?
 # IDEA : Adjust agressivity of pacs based on state of the game ?
+# IDEA : Use better choice than random if all possibilities are equal
 # ==========================Constants==============================
 WINNERS_AGAINST: Dict = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 # ==========================Utils==================================
@@ -35,13 +39,9 @@ def get_neighbors(
     ]
 
 
-def log_err(mess: Any):
-    print(mess, file=sys.stderr)
-
-
 def get_action(pac: Dict) -> str:
-    if pac.get("cooldown", 1) < 1:
-        return f"SPEED {pac.get('id')}"
+    # if pac.get("cooldown", 1) < 1:
+    #    return f"SPEED {pac.get('id')}"
     return f"MOVE {pac.get('id')} {pac.get('target', {}).get('x')} {pac.get('target', {}).get('y')}"
 
 
@@ -50,13 +50,14 @@ def diffuse(
     starting_point: Optional[Tuple[int, int]],
     starting_value: float,
     decaying_factor: float,
-    eta: float,
+    max_iter: int = 10,
 ) -> Dict:
     current_value: float = starting_value
     visited_cells: List[Optional[Tuple[int, int]]] = []
 
     neighbors: List[Optional[Tuple[int, int]]] = [starting_point]
-    while abs(current_value) > eta:
+    _iter = 0
+    while _iter < max_iter:
         next_neighbors: List[Optional[Tuple[int, int]]] = []
         for neighbor in neighbors:
             cells[neighbor]["value"] += current_value
@@ -70,6 +71,7 @@ def diffuse(
             )
         current_value = round(current_value * decaying_factor, 2)
         neighbors = next_neighbors
+        _iter += 1
     return cells
 
 
@@ -129,43 +131,50 @@ while True:
     for i in range(visible_pellet_count):
         # value: amount of points this pellet is worth
         int_x, int_y, value = [int(j) for j in input().split()]
-        current_turn_cells = diffuse(
-            current_turn_cells, (int_x, int_y), value, 0.9, 0.6 if value == 1 else 1
-        )
+        current_turn_cells = diffuse(current_turn_cells, (int_x, int_y), value, 0.5,)
+
+    # for coords, cell in current_turn_cells.items():
+    #     log_err(f"{coords} : {cell.get('value')}")
 
     action: str = ""
     for pac in [p for p in pacs if p.get("mine")]:
         current_pac_cells: Dict = copy.deepcopy(current_turn_cells)
+        print(pac, file=sys.stderr)
 
         # Diffuse pacs values
-        for friend_pac in [p for p in pacs if p.get("mine")]:
+        for friend_pac in [
+            p for p in pacs if p.get("mine") and p.get("id") != pac.get("id")
+        ]:
+            print(f"Diffusing friend : {friend_pac.get('id')}", file=sys.stderr)
             current_pac_cells = diffuse(
-                current_pac_cells,
-                friend_pac.get("coordinates", (0, 0)),
-                -10,
-                0.9 if friend_pac.get("id") != pac.get("id") else 0,
-                1,
+                current_pac_cells, friend_pac.get("coordinates", (0, 0)), -10, 0.75,
             )
 
         for foe_pac in [p for p in pacs if not p.get("mine")]:
             current_pac_cells = diffuse(
                 current_pac_cells,
-                pac.get("coordinates"),
-                10
+                foe_pac.get("coordinates"),
+                100
                 if is_my_pac_winning(pac.get("shape"), foe_pac.get("shape"))
-                else -10,
-                0.9,
-                1,
+                else -100,
+                0.1,
+                max_iter=3,
             )
 
-        best_cells = sorted(
-            current_pac_cells.values(), key=lambda x: x.get("value"), reverse=True
-        )
+        neighbors: List[Dict] = [
+            current_pac_cells.get(coords, {})
+            for coords in get_neighbors(
+                pac.get("coordinates", (0, 0)), width=width, height=height
+            )
+            if current_pac_cells.get(coords)
+        ]
+
+        best_cells = sorted(neighbors, key=lambda x: x.get("value"), reverse=True)
         pac["target"] = best_cells[0]
 
         action += f"{get_action(pac)} |"
 
-        log_err(pac)
-        log_err(best_cells)
+        print(pac, file=sys.stderr)
+        print(best_cells[:2], file=sys.stderr)
 
     print(action)
