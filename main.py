@@ -1,6 +1,8 @@
+import copy
 import math
 import sys
-from typing import Dict, List, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # ==========================Classes==========================
@@ -28,6 +30,38 @@ def get_neighbors(
     ]
 
 
+def log_err(mess: Any):
+    print(mess, file=sys.stderr)
+
+
+def diffuse(
+    cells: Dict,
+    starting_point: Tuple[int, int],
+    starting_value: float,
+    decaying_factor: float,
+    eta: float,
+) -> Dict:
+    current_value: float = starting_value
+    visited_cells: List[Tuple[int, int]] = []
+
+    neighbors: List[Tuple[int, int]] = [starting_point]
+    while current_value > eta:
+        next_neighbors: List[Tuple[int, int]] = []
+        for neighbor in neighbors:
+            cells[neighbor]["value"] += current_value
+            visited_cells.append(neighbor)
+            next_neighbors.extend(
+                [
+                    n
+                    for n in cells.get(neighbor, {}).get("neighbors", [])
+                    if n not in visited_cells and n not in next_neighbors
+                ]
+            )
+        current_value = round(current_value * decaying_factor, 2)
+        neighbors = next_neighbors
+    return cells
+
+
 # ==========================Game===================================
 
 # width: size of the grid
@@ -39,7 +73,7 @@ for i in range(height):
     row = input()  # one line of the grid: space " " is floor, pound "#" is wall
     for x_ind, char in enumerate(row):
         if char != "#":
-            cells[(x_ind, i)] = {"value": 1, "neighbors": [], "x": x_ind, "y": i}
+            cells[(x_ind, i)] = {"value": 0, "neighbors": [], "x": x_ind, "y": i}
 
 # Populate neighbors
 # TODO : optimize symmetry
@@ -54,6 +88,8 @@ for coord in cells.keys():
 
 # game loop
 while True:
+    current_turn_cells: Dict = copy.deepcopy(cells)
+
     my_score, opponent_score = [int(j) for j in input().split()]
     visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
     my_pacs: List[Pac] = []
@@ -81,21 +117,23 @@ while True:
     for i in range(visible_pellet_count):
         # value: amount of points this pellet is worth
         int_x, int_y, value = [int(j) for j in input().split()]
+        current_turn_cells = diffuse(
+            current_turn_cells, (int_x, int_y), value, 0.9, 0.5
+        )
 
     action: str = ""
     for pac in my_pacs:
         neighbors: List[Dict] = [
-            cells.get(coords, {})
+            current_turn_cells.get(coords, {})
             for coords in get_neighbors(pac.coordinates, width=width, height=height)
-            if cells.get(coords)
+            if current_turn_cells.get(coords)
         ]
-
         pac.target = max(neighbors, key=lambda x: x.get("value"))
 
         action += f"{pac.get_action()} |"
 
-    # Write an action using print
-    # To debug: print("Debug messages...", file=sys.stderr)
+        log_err(pac.id)
+        log_err(neighbors)
+        log_err(pac.target)
 
-    # MOVE <pacId> <x> <y>
     print(action)
