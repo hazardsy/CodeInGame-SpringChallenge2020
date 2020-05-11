@@ -5,8 +5,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# TODO : Diffuse from previous as a way to get out of dead ends ?
-# TODO : Diffuse a base value based on last time a cell was visible
+# TODO : Store every visited position and diffuse negatively depending on age
 # TODO : Diffuse big pellets on n_iter depending on map size
 # TODO : Increase diffuse range if pellets are in vision but every score is 0
 # TODO : Ajust diffusing numbers
@@ -28,7 +27,7 @@ def is_my_pac_winning(my_type: Optional[str], foe_type: Optional[str]) -> bool:
     return WINNERS_AGAINST.get("foe_type") == my_type
 
 
-def get_neighbors(
+def get_adjacents(
     coords: Tuple[int, int], width: int, height: int
 ) -> List[Tuple[int, int]]:
     return [
@@ -76,9 +75,6 @@ def diffuse(
 
 
 # ==========================Game===================================
-
-# width: size of the grid
-# height: top left corner is (x=0, y=0)
 width, height = [int(i) for i in input().split()]
 cells: Dict = {}
 
@@ -93,33 +89,39 @@ for coord in cells.keys():
     cells[coord].get("neighbors").extend(
         [
             neighbor
-            for neighbor in get_neighbors(coord, width, height)
+            for neighbor in get_adjacents(coord, width, height)
             if cells.get(neighbor)
         ]
     )
 
-# game loop
+pacs: Dict[str, Dict[str, Dict]] = {"mine": {}, "foe": {}}
+
 while True:
     current_turn_cells: Dict = copy.deepcopy(cells)
 
     my_score, opponent_score = [int(j) for j in input().split()]
-    visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
-    pacs: List[Dict] = []
+    visible_pac_count = int(input())
     for i in range(visible_pac_count):
         (id, mine, x, y, type_id, speed_turns_left, ability_cooldown,) = input().split()
 
-        pacs.append(
+        last_coordinates = pacs.get("mine", {}).get(id, {}).get("coordinates")
+
+        pacs["mine" if mine != "0" else "foe"].update(
             {
-                "coordinates": (int(x), int(y)),
-                "id": int(id),
-                "mine": mine != "0",
-                "shape": type_id,
-                "cooldown": int(ability_cooldown),
-                "speed_turns_left": int(speed_turns_left),
+                id: {
+                    "coordinates": (int(x), int(y)),
+                    "id": int(id),
+                    "mine": mine != "0",
+                    "shape": type_id,
+                    "cooldown": int(ability_cooldown),
+                    "speed_turns_left": int(speed_turns_left),
+                    "last_position": last_coordinates,
+                }
             }
         )
 
-    visible_pellet_count = int(input())  # all pellets in sight
+    print(pacs, file=sys.stderr)
+    visible_pellet_count = int(input())
 
     # Diffuse pellet values
     for i in range(visible_pellet_count):
@@ -127,20 +129,20 @@ while True:
         current_turn_cells = diffuse(current_turn_cells, (int_x, int_y), value, 0.5,)
 
     action: str = ""
-    for pac in [p for p in pacs if p.get("mine")]:
+    for pac in [p for p in pacs.get("mine", {}).values()]:
         current_pac_cells: Dict = copy.deepcopy(current_turn_cells)
 
         # TODO : Refactor using a single loop and a method for getting diffuse value
         # Diffuse friendly pacs values
         for friend_pac in [
-            p for p in pacs if p.get("mine") and p.get("id") != pac.get("id")
+            p for id, p in pacs.get("mine", {}).items() if id != pac.get("id")
         ]:
             current_pac_cells = diffuse(
                 current_pac_cells, friend_pac.get("coordinates", (0, 0)), -10, 0.75,
             )
 
         # Diffuse foe pacs values
-        for foe_pac in [p for p in pacs if not p.get("mine")]:
+        for foe_pac in [p for p in pacs.get("foe", {}).values()]:
             current_pac_cells = diffuse(
                 current_pac_cells,
                 foe_pac.get("coordinates"),
@@ -151,10 +153,16 @@ while True:
                 max_iter=3,
             )
 
+        if pac.get("last_position"):
+            # Diffuse last position
+            current_pac_cells = diffuse(
+                current_pac_cells, pac.get("last_position"), -100, 0.1, max_iter=2
+            )
+
         # First order neighbors
         neighbors: List[Dict] = [
             current_pac_cells.get(coords, {})
-            for coords in get_neighbors(
+            for coords in get_adjacents(
                 pac.get("coordinates", (0, 0)), width=width, height=height
             )
             if current_pac_cells.get(coords)
@@ -165,7 +173,7 @@ while True:
             neighbors = [
                 current_pac_cells.get(coords, {})
                 for neighbor in neighbors
-                for coords in get_neighbors(
+                for coords in get_adjacents(
                     (neighbor.get("x", 0), neighbor.get("y", 0)),
                     width=width,
                     height=height,
