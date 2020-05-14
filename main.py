@@ -75,7 +75,6 @@ def diffuse(
 
 # ==========================Game===================================
 width, height = [int(i) for i in input().split()]
-print(width * height, file=sys.stderr)
 cells: Dict = {}
 
 for i in range(height):
@@ -113,6 +112,13 @@ while True:
         if not pacs.get("mine" if mine != "0" else "foe", {}).get(id):
             pacs["mine" if mine != "0" else "foe"][id] = {}
 
+        prev_coords: Optional[Tuple[int, int]] = pacs.get(
+            "mine" if mine != "0" else "foe", {}
+        ).get(id, {}).get("coordinates")
+
+        if prev_coords:
+            previous_pos.append({"coordinates": prev_coords, "age": 0})
+
         pacs["mine" if mine != "0" else "foe"][id].update(
             {
                 "coordinates": (int(x), int(y)),
@@ -121,14 +127,10 @@ while True:
                 "shape": type_id,
                 "cooldown": int(ability_cooldown),
                 "speed_turns_left": int(speed_turns_left),
-                "previous_pos": [
-                    *previous_pos,
-                    {"coordinates": (int(x), int(y)), "age": 0},
-                ],
+                "previous_pos": previous_pos,
             }
         )
 
-    print(pacs, file=sys.stderr)
     visible_pellet_count = int(input())
 
     # Diffuse pellet values
@@ -174,7 +176,7 @@ while True:
                 prev.get("coordinates"),
                 -100 * (0.8 ** prev.get("age", 0)),
                 0.1,
-                max_iter=2,
+                max_iter=1,
             )
 
         # First order neighbors
@@ -188,7 +190,7 @@ while True:
 
         # Pac is speeding, get the best neighbor's neighbor
         if pac.get("speed_turns_left", 0) > 0:
-            neighbors = [
+            dist_two_neighbors = [
                 current_pac_cells.get(coords, {})
                 for neighbor in neighbors
                 for coords in get_adjacents(
@@ -199,6 +201,7 @@ while True:
                 if current_pac_cells.get(coords)
                 and coords != pac.get("coordinates", (0, 0))
             ]
+            neighbors = [*neighbors, *dist_two_neighbors]
 
         best_cells = sorted(neighbors, key=lambda x: x.get("value"), reverse=True)
         pac["target"] = best_cells[0]
