@@ -5,7 +5,6 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# TODO : Diffuse big pellets on n_iter depending on map size
 # TODO : Refactor diffusing parameters
 # TODO : Increase diffuse range if pellets are in vision but every score is 0
 # TODO : Eat pellets in corner even if sped up. Check all neighbors even at distance == one ?
@@ -76,6 +75,7 @@ def diffuse(
 
 # ==========================Game===================================
 width, height = [int(i) for i in input().split()]
+print(width * height, file=sys.stderr)
 cells: Dict = {}
 
 for i in range(height):
@@ -134,7 +134,13 @@ while True:
     # Diffuse pellet values
     for i in range(visible_pellet_count):
         int_x, int_y, value = [int(j) for j in input().split()]
-        current_turn_cells = diffuse(current_turn_cells, (int_x, int_y), value, 0.5,)
+        current_turn_cells = diffuse(
+            current_turn_cells,
+            (int_x, int_y),
+            value,
+            0.5,
+            max_iter=(max(width, height) - 2) // 2 if value == 10 else 15,
+        )
 
     action: str = ""
     for pac in [p for p in pacs.get("mine", {}).values()]:
@@ -166,15 +172,10 @@ while True:
             current_pac_cells = diffuse(
                 current_pac_cells,
                 prev.get("coordinates"),
-                -100 * (0.5 ** prev.get("age", 0)),
+                -100 * (0.8 ** prev.get("age", 0)),
                 0.1,
                 max_iter=2,
             )
-        # if pac.get("last_position"):
-        #     # Diffuse last position
-        #     current_pac_cells = diffuse(
-        #         current_pac_cells, pac.get("last_position"), -100, 0.1, max_iter=2
-        #     )
 
         # First order neighbors
         neighbors: List[Dict] = [
