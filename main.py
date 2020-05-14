@@ -5,9 +5,11 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# TODO : Store every visited position and diffuse negatively depending on age
 # TODO : Diffuse big pellets on n_iter depending on map size
+# TODO : Refactor diffusing parameters
 # TODO : Increase diffuse range if pellets are in vision but every score is 0
+# TODO : Eat pellets in corner even if sped up. Check all neighbors even at distance == one ?
+# TODO : Consider any unseen coordinate as containing a pellet and diffuse them. Update as the game goes.
 # TODO : Ajust diffusing numbers
 # TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
 # TODO : Deal with late game
@@ -15,11 +17,9 @@ from typing import Any, Dict, List, Optional, Tuple
 # TODO : Diffuse every cell but change their value depending on last known information
 # TODO : Increase diffuse range for every pac based on time since last pellet eaten
 # TODO : Better spells usage :D
-# IDEA : Never target an already targetted position
 # IDEA : Adjust diffuse parameters based on remaining pellets ?
 # IDEA : Adjust diffuse parameters based on number of neighbors ?
 # IDEA : Adjust agressivity of pacs based on state of the game ?
-# IDEA : Use better choice than random if all possibilities are equal
 # ==========================Constants==============================
 WINNERS_AGAINST: Dict = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 # ==========================Utils==================================
@@ -104,19 +104,27 @@ while True:
     for i in range(visible_pac_count):
         (id, mine, x, y, type_id, speed_turns_left, ability_cooldown,) = input().split()
 
-        last_coordinates = pacs.get("mine", {}).get(id, {}).get("coordinates")
+        previous_pos: List[Dict] = pacs.get("mine" if mine != "0" else "foe", {}).get(
+            id, {}
+        ).get("previous_pos", [])
+        for prev in previous_pos:
+            prev["age"] += 1
 
-        pacs["mine" if mine != "0" else "foe"].update(
+        if not pacs.get("mine" if mine != "0" else "foe", {}).get(id):
+            pacs["mine" if mine != "0" else "foe"][id] = {}
+
+        pacs["mine" if mine != "0" else "foe"][id].update(
             {
-                id: {
-                    "coordinates": (int(x), int(y)),
-                    "id": int(id),
-                    "mine": mine != "0",
-                    "shape": type_id,
-                    "cooldown": int(ability_cooldown),
-                    "speed_turns_left": int(speed_turns_left),
-                    "last_position": last_coordinates,
-                }
+                "coordinates": (int(x), int(y)),
+                "id": int(id),
+                "mine": mine != "0",
+                "shape": type_id,
+                "cooldown": int(ability_cooldown),
+                "speed_turns_left": int(speed_turns_left),
+                "previous_pos": [
+                    *previous_pos,
+                    {"coordinates": (int(x), int(y)), "age": 0},
+                ],
             }
         )
 
@@ -153,11 +161,20 @@ while True:
                 max_iter=3,
             )
 
-        if pac.get("last_position"):
-            # Diffuse last position
+        # Diffuse all previous positions based on their age
+        for prev in pac.get("previous_pos", []):
             current_pac_cells = diffuse(
-                current_pac_cells, pac.get("last_position"), -100, 0.1, max_iter=2
+                current_pac_cells,
+                prev.get("coordinates"),
+                -100 * (0.5 ** prev.get("age", 0)),
+                0.1,
+                max_iter=2,
             )
+        # if pac.get("last_position"):
+        #     # Diffuse last position
+        #     current_pac_cells = diffuse(
+        #         current_pac_cells, pac.get("last_position"), -100, 0.1, max_iter=2
+        #     )
 
         # First order neighbors
         neighbors: List[Dict] = [
