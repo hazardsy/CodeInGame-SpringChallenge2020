@@ -33,6 +33,14 @@ def is_my_pac_winning(my_type: Optional[str], foe_type: Optional[str]) -> bool:
     return WINNERS_AGAINST.get("foe_type") == my_type
 
 
+def manhattan_distance(A: Tuple[int, ...], B: Tuple[int, ...]) -> int:
+    return sum([abs(B[i] - A[i]) for i in range(len(A))])
+
+
+def get_pac_id(mine: str, id: str) -> str:
+    return f"{mine}{id}"
+
+
 def get_adjacents(
     coords: Tuple[int, int], width: int, height: int
 ) -> List[Tuple[int, int]]:
@@ -48,6 +56,15 @@ def get_action(pac: Dict) -> str:
     if pac.get("cooldown", 1) < 1:
         return f"SPEED {pac.get('id')}"
     return f"MOVE {pac.get('id')} {pac.get('target', {}).get('x')} {pac.get('target', {}).get('y')}"
+
+
+def get_diffuse_params(cur_pac: Dict, other_pac: Dict) -> Dict:
+    if other_pac.get("mine"):
+        return {"starting_value": -10, "decaying_factor": 0.75, "max_iter": 10}
+    if is_my_pac_winning(cur_pac.get("shape"), other_pac.get("shape")):
+        return {"starting_value": 100, "decaying_factor": 0.1, "max_iter": 3}
+    else:
+        return {"starting_value": -100, "decaying_factor": 0.1, "max_iter": 3}
 
 
 def diffuse(
@@ -112,58 +129,59 @@ for coord, cell in cells.items():
     base_x, base_y = cell.get("x"), cell.get("y")
 
     # Going left
-    for x in range(base_x - 1, 0):
-        if not cells.get((x, base_y)):
+    for cur_x in range(base_x - 1, 0, -1):
+        if not cells.get((cur_x, base_y)):
             break
-        cell.get("visible").append((x, base_y))
+        cell.get("visible").append((cur_x, base_y))
 
     # Going right
-    for x in range(base_x + 1, width):
-        if not cells.get((x, base_y)):
+    for cur_x in range(base_x + 1, width):
+        if not cells.get((cur_x, base_y)):
             break
-        cell.get("visible").append((x, base_y))
+        cell.get("visible").append((cur_x, base_y))
 
     # Going up
-    for y in range(base_y - 1, 0):
-        if not cells.get((base_x, y)):
+    for cur_y in range(base_y - 1, 0, -1):
+        if not cells.get((base_x, cur_y)):
             break
-        cell.get("visible").append((base_x, y))
+        cell.get("visible").append((base_x, cur_y))
 
     # Going down
-    for y in range(base_y + 1, height):
-        if not cells.get((base_x, y)):
+    for cur_y in range(base_y + 1, height):
+        if not cells.get((base_x, cur_y)):
             break
-        cell.get("visible").append((base_x, y))
+        cell.get("visible").append((base_x, cur_y))
 
-print(cells, file=sys.stderr)
-
-pacs: Dict[str, Dict[str, Dict]] = {"mine": {}, "foe": {}}
+pacs: Dict[str, Dict] = {}
 
 while True:
+    # start_time = time.time()
     current_turn_cells: Dict = copy.deepcopy(cells)
 
     my_score, opponent_score = [int(j) for j in input().split()]
+
+    # parsing_start_time = time.time()
     visible_pac_count = int(input())
     for i in range(visible_pac_count):
         (id, mine, x, y, type_id, speed_turns_left, ability_cooldown,) = input().split()
 
-        previous_pos: List[Dict] = pacs.get("mine" if mine != "0" else "foe", {}).get(
-            id, {}
-        ).get("previous_pos", [])
+        previous_pos: List[Dict] = pacs.get(get_pac_id(mine, id), {}).get(
+            "previous_pos", []
+        )
         for prev in previous_pos:
             prev["age"] += 1
 
-        if not pacs.get("mine" if mine != "0" else "foe", {}).get(id):
-            pacs["mine" if mine != "0" else "foe"][id] = {}
+        if not pacs.get(get_pac_id(mine, id)):
+            pacs[get_pac_id(mine, id)] = {}
 
-        prev_coords: Optional[Tuple[int, int]] = pacs.get(
-            "mine" if mine != "0" else "foe", {}
-        ).get(id, {}).get("coordinates")
+        prev_coords: Optional[Tuple[int, int]] = pacs.get(get_pac_id(mine, id), {}).get(
+            "coordinates"
+        )
 
         if prev_coords:
             previous_pos.append({"coordinates": prev_coords, "age": 0})
 
-        pacs["mine" if mine != "0" else "foe"][id].update(
+        pacs[get_pac_id(mine, id)].update(
             {
                 "coordinates": (int(x), int(y)),
                 "id": int(id),
@@ -175,44 +193,64 @@ while True:
             }
         )
 
+    # print(f"Parsing time : {time.time() - parsing_start_time}", file=sys.stderr)
+
     visible_pellet_count = int(input())
 
-    # Diffuse pellet values
+    # pellet_start_time = time.time()
+    small_pellets: List[Tuple[int, int]] = []
+    # Diffuse big pellets values
     for i in range(visible_pellet_count):
         int_x, int_y, value = [int(j) for j in input().split()]
-        current_turn_cells = diffuse(
-            current_turn_cells,
-            (int_x, int_y),
-            value,
-            0.5,
-            max_iter=(max(width, height) - 2) // 2 if value == 10 else 15,
-        )
+        if value == 10:
+            current_turn_cells = diffuse(
+                current_turn_cells,
+                (int_x, int_y),
+                value,
+                0.9,
+                max_iter=(max(width, height) - 2) // 2,
+            )
+        else:
+            small_pellets.append((int_x, int_y))
+
+    # print(
+    #     f"Diffusing big pellets values : {time.time() - pellet_start_time}",
+    #     file=sys.stderr,
+    # )
 
     action: str = ""
-    for pac in [p for p in pacs.get("mine", {}).values()]:
+    for pac in [p for p in pacs.values() if p.get("mine")]:
         current_pac_cells: Dict = copy.deepcopy(current_turn_cells)
 
-        # TODO : Refactor using a single loop and a method for getting diffuse value
-        # Diffuse friendly pacs values
-        for friend_pac in [
-            p for id, p in pacs.get("mine", {}).items() if id != pac.get("id")
-        ]:
-            current_pac_cells = diffuse(
-                current_pac_cells, friend_pac.get("coordinates", (0, 0)), -10, 0.75,
-            )
-
-        # Diffuse foe pacs values
-        for foe_pac in [p for p in pacs.get("foe", {}).values()]:
+        # sp_time = time.time()
+        # Diffuse all visible small pellets
+        visible_pellets = [
+            pel
+            for pel in small_pellets
+            if pel
+            in current_pac_cells.get(pac.get("coordinates"), (0, 0)).get("visible")
+        ]
+        for pel in visible_pellets:
             current_pac_cells = diffuse(
                 current_pac_cells,
-                foe_pac.get("coordinates"),
-                100
-                if is_my_pac_winning(pac.get("shape"), foe_pac.get("shape"))
-                else -100,
-                0.1,
-                max_iter=3,
+                pel,
+                1,
+                0.75,
+                manhattan_distance(pac.get("coordinates", (0, 0)), pel),
             )
+        # print(f"Diffusing small pellets : {time.time() - sp_time}", file=sys.stderr)
 
+        # diffusing_pacs_time = time.time()
+        # Diffuse all other pacs
+        for other_pac in [p for p in pacs.values() if p != pac]:
+            current_pac_cells = diffuse(
+                current_pac_cells,
+                other_pac.get("coordinates", (0, 0)),
+                **get_diffuse_params(pac, other_pac),
+            )
+        # print(f"Diffusing pacs : {time.time() - diffusing_pacs_time}", file=sys.stderr)
+
+        # diffusing_pos_time = time.time()
         # Diffuse all previous positions based on their age
         for prev in pac.get("previous_pos", []):
             current_pac_cells = diffuse(
@@ -222,7 +260,12 @@ while True:
                 0.1,
                 max_iter=1,
             )
+        # print(
+        #     f"Diffusing previous pos : {time.time() - diffusing_pos_time}",
+        #     file=sys.stderr,
+        # )
 
+        # target_time = time.time()
         # First order neighbors
         neighbors: List[Dict] = [
             current_pac_cells.get(coords, {})
@@ -251,8 +294,10 @@ while True:
         pac["target"] = best_cells[0]
 
         action += f"{get_action(pac)} |"
+        # print(f"Selecting target time : {time.time() - target_time}", file=sys.stderr)
 
         print(pac, file=sys.stderr)
         print(best_cells[:2], file=sys.stderr)
+    # print(time.time() - start_time, file=sys.stderr)
 
     print(action)
