@@ -5,9 +5,16 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+# BIG TODO :
+# At startup : consider each cell as full
+# For each cell, store age since last seen and diffuse value based on this
+# Only update cells value based on which are seen
+# Modify diffuse values based on numbers of step already done in the game
+# Diffuse all pacs the same, only values change
+# Diffuse previous and current coordinates for all pacs except current
+
 # TODO : Refactor diffusing parameters
 # TODO : Increase diffuse range if pellets are in vision but every score is 0
-# TODO : Eat pellets in corner even if sped up. Check all neighbors even at distance == one ?
 # TODO : Consider any unseen coordinate as containing a pellet and diffuse them. Update as the game goes.
 # TODO : Ajust diffusing numbers
 # TODO : Move pacs one by one starting with the one with better move and adjusts scores based on that
@@ -81,17 +88,54 @@ for i in range(height):
     row = input()  # one line of the grid: space " " is floor, pound "#" is wall
     for x_ind, char in enumerate(row):
         if char != "#":
-            cells[(x_ind, i)] = {"value": 0, "neighbors": [], "x": x_ind, "y": i}
+            cells[(x_ind, i)] = {
+                "value": 0,
+                "neighbors": [],
+                "x": x_ind,
+                "y": i,
+                "visible": [],
+                "last_seen": 0,
+            }
 
-# Populate neighbors
-for coord in cells.keys():
-    cells[coord].get("neighbors").extend(
+
+for coord, cell in cells.items():
+    # Populate neighbors
+    cell.get("neighbors").extend(
         [
             neighbor
             for neighbor in get_adjacents(coord, width, height)
             if cells.get(neighbor)
         ]
     )
+
+    # Populate visible cells
+    base_x, base_y = cell.get("x"), cell.get("y")
+
+    # Going left
+    for x in range(base_x - 1, 0):
+        if not cells.get((x, base_y)):
+            break
+        cell.get("visible").append((x, base_y))
+
+    # Going right
+    for x in range(base_x + 1, width):
+        if not cells.get((x, base_y)):
+            break
+        cell.get("visible").append((x, base_y))
+
+    # Going up
+    for y in range(base_y - 1, 0):
+        if not cells.get((base_x, y)):
+            break
+        cell.get("visible").append((base_x, y))
+
+    # Going down
+    for y in range(base_y + 1, height):
+        if not cells.get((base_x, y)):
+            break
+        cell.get("visible").append((base_x, y))
+
+print(cells, file=sys.stderr)
 
 pacs: Dict[str, Dict[str, Dict]] = {"mine": {}, "foe": {}}
 
