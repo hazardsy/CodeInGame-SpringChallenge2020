@@ -26,8 +26,8 @@ from typing import Any, Dict, List, Optional, Tuple
 # IDEA : Adjust agressivity of pacs based on state of the game ?
 # ==========================Constants==============================
 WINNERS_AGAINST: Dict = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
-STATIC_RANGE: int = 3
-DECAYING_FACTOR: float = 0.9
+STATIC_RANGE: int = 5
+DECAYING_FACTOR: float = 0.8
 # ==========================Utils==================================
 def is_my_pac_winning(my_type: Optional[str], foe_type: Optional[str]) -> bool:
     return WINNERS_AGAINST.get("foe_type") == my_type
@@ -46,13 +46,13 @@ def get_cells_closer_than_x(
 ) -> List[Tuple[int, Dict]]:
     return_targets: List[Tuple[int, Dict]] = []
     currently_visiting = [origin]
-    depth = 1
+    depth = 0
     while depth <= x:
         next_visiting: List[Tuple[int, int]] = []
         for coord in currently_visiting:
             cell: Dict = cells.get(coord, {})
             if cell not in [t[1] for t in return_targets]:
-                return_targets.append((depth, cell))
+                return_targets.append((depth, copy.copy(cell)))
             next_visiting.extend(cell.get("neighbors", []))
         currently_visiting = next_visiting
         depth += 1
@@ -78,8 +78,11 @@ def get_action(pac: Dict) -> str:
 
 def get_pac_value(cur_pac: Dict, other_pac: Dict) -> int:
     if other_pac.get("mine"):
-        return -10
-    if is_my_pac_winning(cur_pac.get("shape"), other_pac.get("shape")):
+        return -100
+    if (
+        is_my_pac_winning(cur_pac.get("shape"), other_pac.get("shape"))
+        and other_pac.get("cooldown", 0) > 0
+    ):
         return 100
     else:
         return -100
@@ -100,7 +103,7 @@ def diffuse(
     while _iter < max_iter:
         next_neighbors: List[Optional[Tuple[int, int]]] = []
         for neighbor in neighbors:
-            cells[neighbor]["value"] += current_value
+            cells[neighbor]["current_value"] += current_value
             visited_cells.append(neighbor)
             next_neighbors.extend(
                 [
@@ -125,6 +128,7 @@ for i in range(height):
         if char != "#":
             cells[(x_ind, i)] = {
                 "value": 1,
+                "current_value": 1,
                 "neighbors": [],
                 "x": x_ind,
                 "y": i,
@@ -173,13 +177,12 @@ for coord, cell in cells.items():
 pacs: Dict[str, Dict] = {}
 
 while True:
-    start_time = time.time()
+    start_time = time.process_time()
     my_score, opponent_score = [int(j) for j in input().split()]
 
     for cell in cells.values():
         cell["last_seen"] += 1
 
-    # parsing_start_time = time.time()
     visible_pac_count = int(input())
     for i in range(visible_pac_count):
         (id, mine, x, y, type_id, speed_turns_left, ability_cooldown,) = input().split()
@@ -221,25 +224,28 @@ while True:
         for coord in cells.get(pac.get("coordinates"), (0, 0)).get("visible"):
             cells[coord]["last_seen"] = 0
             cells[coord]["value"] = 0
+            cells[coord]["current_value"] = 0
 
-    # print(f"Parsing time : {time.time() - parsing_start_time}", file=sys.stderr)
-
-    diffused_cells = copy.deepcopy(cells)
     visible_pellet_count = int(input())
+    diffused_cells = copy.deepcopy(cells)
 
     # Update values for each visible pellet
     for i in range(visible_pellet_count):
         int_x, int_y, value = [int(j) for j in input().split()]
         diffused_cells[(int_x, int_y)]["value"] = value
+        diffused_cells[(int_x, int_y)]["current_value"] = value
         if value == 10:
             diffused_cells = diffuse(
                 diffused_cells, (int_x, int_y), value, 0.75, max_iter=30
             )
 
+    reset_cells = copy.deepcopy(diffused_cells)
+
     action: str = ""
     for pac in [p for p in pacs.values() if p.get("mine")]:
-        #print(pac.get("id"), file=sys.stderr)
-        current_pac_cells: Dict = copy.deepcopy(diffused_cells)
+        pac_time = time.process_time()
+
+        current_pac_cells: Dict = reset_cells
 
         # Set values for pacs locations
         for other_pac in [p for p in pacs.values() if p != pac]:
@@ -251,13 +257,17 @@ while True:
         for distance, cell in get_cells_closer_than_x(
             current_pac_cells, pac.get("coordinates", (0, 0)), pac.get("range", 0)
         ):
-            current_pac_cells = diffuse(
-                current_pac_cells,
-                (cell.get("x", 0), cell.get("y", 0)),
-                cell.get("value", 0),
-                DECAYING_FACTOR,
-                max_iter=distance,
-            )
+            if cell.get("value") != 0 and (
+                cell.get("x", 0),
+                cell.get("y", 0),
+            ) != pac.get("coordinates"):
+                current_pac_cells = diffuse(
+                    current_pac_cells,
+                    (cell.get("x", 0), cell.get("y", 0)),
+                    cell.get("value", 0),
+                    DECAYING_FACTOR,
+                    max_iter=distance,
+                )
 
         # Diffuse all previous positions based on their age
         for prev in pac.get("previous_pos", []):
@@ -269,7 +279,6 @@ while True:
                 max_iter=1,
             )
 
-        # target_time = time.time()
         # First order neighbors
         neighbors: List[Dict] = [
             current_pac_cells.get(coords, {})
@@ -294,15 +303,19 @@ while True:
             ]
             neighbors = [*neighbors, *dist_two_neighbors]
 
-        best_cells = sorted(neighbors, key=lambda x: x.get("value"), reverse=True)
+        best_cells = sorted(
+            neighbors, key=lambda x: x.get("current_value"), reverse=True
+        )
         pac["target"] = best_cells[0]
 
-        action += f"{get_action(pac)} |"
-        # print(f"Selecting target time : {time.time() - target_time}", file=sys.stderr)
+        action += f"{get_action(pac)}|"
+        print(pac, file=sys.stderr)
+        print(best_cells[:2], file=sys.stderr)
 
-        #print(pac, file=sys.stderr)
-        #print(best_cells[:2], file=sys.stderr)
-        #print(action, file=sys.stderr)
-    #print(time.time() - start_time, file=sys.stderr)
+        print(
+            f"Time to treat current pac : {time.process_time() - pac_time}",
+            file=sys.stderr,
+        )
+    print(time.process_time() - start_time, file=sys.stderr)
 
     print(action)
